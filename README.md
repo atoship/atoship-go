@@ -185,5 +185,5 @@ MIT License - see LICENSE file for details.
 ## Support
 
 - Documentation: https://atoship.com/docs
-- API Reference: https://api.atoship.com/docs
+- API Reference: https://atoship.com/docs/api-reference
 - Support: support@atoship.com
