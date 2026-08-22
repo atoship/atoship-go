@@ -15,7 +15,7 @@ The official Go SDK for the atoship API. This SDK provides a comprehensive, type
 ## Installation
 
 ```bash
-go get github.com/atoship/go-sdk
+go get github.com/atoship/atoship-go
 ```
 
 ## Quick Start
@@ -28,7 +28,7 @@ import (
     "fmt"
     "log"
     
-    "github.com/atoship/go-sdk/atoship"
+    "github.com/atoship/atoship-go/atoship"
 )
 
 func main() {
@@ -129,7 +129,7 @@ tracking, err := client.Tracking.Track(context.Background(), "1Z999AA10123456784
 The SDK provides typed errors for better error handling:
 
 ```go
-import "github.com/atoship/go-sdk/atoship"
+import "github.com/atoship/atoship-go/atoship"
 
 label, err := client.Shipping.PurchaseLabel(ctx, request)
 if err != nil {

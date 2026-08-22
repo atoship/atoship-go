@@ -29,18 +29,18 @@ type CreateWebhookRequest struct {
 // Create creates a new webhook
 func (s *WebhooksService) Create(ctx context.Context, req *CreateWebhookRequest) (*Webhook, error) {
 	var webhook Webhook
-	err := s.client.post(ctx, "/api/admin/webhooks", req, &webhook)
+	err := s.client.post(ctx, "/api/v1/webhooks", req, &webhook)
 	return &webhook, err
 }
 
 // List lists all webhooks
 func (s *WebhooksService) List(ctx context.Context) ([]Webhook, error) {
 	var webhooks []Webhook
-	err := s.client.get(ctx, "/api/admin/webhooks", &webhooks)
+	err := s.client.get(ctx, "/api/v1/webhooks", &webhooks)
 	return webhooks, err
 }
 
 // Delete deletes a webhook
 func (s *WebhooksService) Delete(ctx context.Context, webhookID string) error {
-	return s.client.delete(ctx, fmt.Sprintf("/api/admin/webhooks/%s", webhookID))
+	return s.client.delete(ctx, fmt.Sprintf("/api/v1/webhooks/%s", webhookID))
 }

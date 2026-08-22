@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	
-	"github.com/atoship/go-sdk/atoship"
+	"github.com/atoship/atoship-go/atoship"
 )
 
 func main() {

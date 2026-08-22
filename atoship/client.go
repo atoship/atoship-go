@@ -31,7 +31,6 @@ type Client struct {
 	Shipping  *ShippingService
 	Tracking  *TrackingService
 	Users     *UsersService
-	Admin     *AdminService
 	Carriers  *CarriersService
 	Webhooks  *WebhooksService
 }
@@ -69,7 +68,6 @@ func NewClient(apiKey string, opts ...ClientOption) *Client {
 	client.Shipping = &ShippingService{client: client}
 	client.Tracking = &TrackingService{client: client}
 	client.Users = &UsersService{client: client}
-	client.Admin = &AdminService{client: client}
 	client.Carriers = &CarriersService{client: client}
 	client.Webhooks = &WebhooksService{client: client}
 
