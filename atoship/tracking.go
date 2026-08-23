@@ -2,57 +2,49 @@ package atoship
 
 import (
 	"context"
-	"time"
+	"net/url"
 )
 
-// TrackingService handles tracking-related operations
-type TrackingService struct {
-	client *Client
-}
+// TrackingService follows shipments.
+type TrackingService struct{ client *Client }
 
-// TrackingInfo represents tracking information for a package
-type TrackingInfo struct {
-	TrackingNumber  string           `json:"trackingNumber"`
-	Carrier         string           `json:"carrier"`
-	Status          string           `json:"status"`
-	EstimatedDelivery *time.Time     `json:"estimatedDelivery,omitempty"`
-	ActualDelivery  *time.Time       `json:"actualDelivery,omitempty"`
-	Events          []TrackingEvent  `json:"events"`
-	CurrentLocation string           `json:"currentLocation,omitempty"`
-	Delivered       bool             `json:"delivered"`
-	Exception       bool             `json:"exception"`
-	ExceptionReason string           `json:"exceptionReason,omitempty"`
-}
-
-// TrackingEvent represents a tracking event
+// TrackingEvent is one scan.
 type TrackingEvent struct {
-	Timestamp   time.Time `json:"timestamp"`
-	Status      string    `json:"status"`
-	Description string    `json:"description"`
-	Location    string    `json:"location"`
-	Details     string    `json:"details,omitempty"`
+	Status      string `json:"status"`
+	Description string `json:"description"`
+	Location    string `json:"location"`
+	Timestamp   string `json:"timestamp"`
 }
 
-// Track tracks a package by tracking number
-func (s *TrackingService) Track(ctx context.Context, trackingNumber string) (*TrackingInfo, error) {
-	var info TrackingInfo
-	err := s.client.get(ctx, "/api/tracking/"+trackingNumber, &info)
-	return &info, err
+// Tracking is a shipment's current state and its scan history.
+//
+// Status is normalised across carriers: pre_transit, in_transit, out_for_delivery,
+// delivered, available_for_pickup, return_to_sender, failure, cancelled, unknown.
+// StatusDetail is the carrier's own wording and varies.
+type Tracking struct {
+	Object            string          `json:"object"`
+	TrackingNumber    string          `json:"tracking_number"`
+	Carrier           string          `json:"carrier"`
+	Service           string          `json:"service"`
+	Status            string          `json:"status"`
+	StatusDetail      string          `json:"status_detail"`
+	EstimatedDelivery string          `json:"estimated_delivery"`
+	ActualDelivery    string          `json:"actual_delivery"`
+	Origin            Address         `json:"origin"`
+	Destination       Address         `json:"destination"`
+	Events            []TrackingEvent `json:"events"`
+	UpdatedAt         string          `json:"updated_at"`
 }
 
-// TrackWithCarrier tracks a package with a specific carrier
-func (s *TrackingService) TrackWithCarrier(ctx context.Context, trackingNumber, carrier string) (*TrackingInfo, error) {
-	var info TrackingInfo
-	err := s.client.get(ctx, "/api/tracking/"+trackingNumber+"?carrier="+carrier, &info)
-	return &info, err
-}
-
-// BatchTrack tracks multiple packages
-func (s *TrackingService) BatchTrack(ctx context.Context, trackingNumbers []string) ([]TrackingInfo, error) {
-	var infos []TrackingInfo
-	req := map[string][]string{
-		"trackingNumbers": trackingNumbers,
+// Get returns tracking for a number.
+//
+// A label bought minutes ago may have no scans yet: the carrier has the number
+// but has not received the parcel. That returns status pre_transit with an empty
+// Events, which is normal and not an error.
+func (s *TrackingService) Get(ctx context.Context, trackingNumber string) (*Tracking, error) {
+	var out Tracking
+	if err := s.client.get(ctx, "/api/v1/tracking/"+url.PathEscape(trackingNumber), nil, &out); err != nil {
+		return nil, err
 	}
-	err := s.client.post(ctx, "/api/tracking/batch", req, &infos)
-	return infos, err
+	return &out, nil
 }

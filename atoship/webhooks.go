@@ -2,45 +2,83 @@ package atoship
 
 import (
 	"context"
-	"fmt"
+	"net/url"
 )
 
-// WebhooksService handles webhook-related operations
-type WebhooksService struct {
-	client *Client
-}
+// WebhooksService manages the endpoints atoship posts events to.
+type WebhooksService struct{ client *Client }
 
-// Webhook represents a webhook configuration
+// Webhook is a registered endpoint.
 type Webhook struct {
-	ID      string   `json:"id"`
-	URL     string   `json:"url"`
-	Events  []string `json:"events"`
-	Active  bool     `json:"active"`
-	Secret  string   `json:"secret,omitempty"`
+	ID        string   `json:"id"`
+	Object    string   `json:"object"`
+	URL       string   `json:"url"`
+	Events    []string `json:"events"`
+	IsActive  bool     `json:"is_active"`
+	Secret    string   `json:"secret,omitempty"`
+	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
 }
 
-// CreateWebhookRequest represents a request to create a webhook
-type CreateWebhookRequest struct {
-	URL    string   `json:"url"`
-	Events []string `json:"events"`
-	Active bool     `json:"active,omitempty"`
+// WebhookRequest registers or updates an endpoint.
+//
+// Events empty means every event. Secret is returned once, on create — store it
+// then; it is what you verify incoming deliveries against.
+type WebhookRequest struct {
+	URL      string   `json:"url,omitempty"`
+	Events   []string `json:"events,omitempty"`
+	IsActive *bool    `json:"is_active,omitempty"`
 }
 
-// Create creates a new webhook
-func (s *WebhooksService) Create(ctx context.Context, req *CreateWebhookRequest) (*Webhook, error) {
-	var webhook Webhook
-	err := s.client.post(ctx, "/api/v1/webhooks", req, &webhook)
-	return &webhook, err
+// List returns your registered webhooks.
+func (s *WebhooksService) List(ctx context.Context, opts *ListOptions) ([]Webhook, Pagination, error) {
+	q := url.Values{}
+	opts.apply(q)
+	var out listEnvelope[Webhook]
+	if err := s.client.get(ctx, "/api/v1/webhooks", q, &out); err != nil {
+		return nil, Pagination{}, err
+	}
+	return out.Data, out.Pagination, nil
 }
 
-// List lists all webhooks
-func (s *WebhooksService) List(ctx context.Context) ([]Webhook, error) {
-	var webhooks []Webhook
-	err := s.client.get(ctx, "/api/v1/webhooks", &webhooks)
-	return webhooks, err
+// Get returns one webhook.
+func (s *WebhooksService) Get(ctx context.Context, id string) (*Webhook, error) {
+	var out Webhook
+	if err := s.client.get(ctx, "/api/v1/webhooks/"+url.PathEscape(id), nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
-// Delete deletes a webhook
-func (s *WebhooksService) Delete(ctx context.Context, webhookID string) error {
-	return s.client.delete(ctx, fmt.Sprintf("/api/v1/webhooks/%s", webhookID))
+// Create registers an endpoint. The response carries Secret — this is the only
+// time it is returned.
+func (s *WebhooksService) Create(ctx context.Context, req *WebhookRequest) (*Webhook, error) {
+	var out Webhook
+	if err := s.client.post(ctx, "/api/v1/webhooks", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Update replaces a webhook's configuration.
+func (s *WebhooksService) Update(ctx context.Context, id string, req *WebhookRequest) (*Webhook, error) {
+	var out Webhook
+	if err := s.client.put(ctx, "/api/v1/webhooks/"+url.PathEscape(id), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Patch changes part of a webhook, leaving the rest alone.
+func (s *WebhooksService) Patch(ctx context.Context, id string, req *WebhookRequest) (*Webhook, error) {
+	var out Webhook
+	if err := s.client.patch(ctx, "/api/v1/webhooks/"+url.PathEscape(id), req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Delete unregisters an endpoint.
+func (s *WebhooksService) Delete(ctx context.Context, id string) error {
+	return s.client.del(ctx, "/api/v1/webhooks/"+url.PathEscape(id), nil)
 }

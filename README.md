@@ -1,189 +1,153 @@
 # atoship Go SDK
 
-The official Go SDK for the atoship API. This SDK provides a comprehensive, type-safe interface for all atoship shipping and logistics operations.
+Go client for the [atoship](https://atoship.com) shipping API. Quote a shipment
+across carriers, buy the label, track it.
 
-## Features
-
-- 🚀 **Type-safe**: Full Go type definitions with compile-time checking
-- 🔒 **Secure**: Built-in API key management and request signing
-- 🔄 **Robust**: Automatic retries, timeout handling, and error management
-- 📦 **Comprehensive**: Covers all atoship API endpoints
-- ⚡ **Fast**: Optimized for performance with connection pooling
-- 🛡️ **Validated**: Built-in data validation
-- 🧪 **Well-tested**: Comprehensive unit tests
-
-## Installation
+No dependencies outside the standard library.
 
 ```bash
 go get github.com/atoship/atoship-go
 ```
 
-## Quick Start
-
-```go
-package main
-
-import (
-    "context"
-    "fmt"
-    "log"
-    
-    "github.com/atoship/atoship-go/atoship"
-)
-
-func main() {
-    // Initialize the SDK
-    client := atoship.NewClient("your-api-key")
-    
-    // Create an order
-    order, err := client.Orders.Create(context.Background(), &atoship.CreateOrderRequest{
-        OrderNumber:      "ORDER-12345",
-        RecipientName:    "John Doe",
-        RecipientStreet1: "123 Main St",
-        RecipientCity:    "San Francisco",
-        RecipientState:   "CA",
-        RecipientPostal:  "94105",
-        RecipientCountry: "US",
-        RecipientPhone:   "415-555-0123",
-        Items: []atoship.OrderItem{
-            {
-                Name:       "Product",
-                SKU:        "SKU-001",
-                Quantity:   1,
-                UnitPrice:  29.99,
-                Weight:     2.0,
-                WeightUnit: "lb",
-            },
-        },
-    })
-    
-    if err != nil {
-        log.Fatal("Failed to create order:", err)
-    }
-    
-    fmt.Printf("Order created: %s\n", order.ID)
-}
-```
-
-## SDK Structure
-
-The SDK is organized into logical service groups:
-
-- **Orders**: Order management operations
-- **Addresses**: Address validation and management
-- **Shipping**: Rate calculation and label generation
-- **Tracking**: Package tracking
-- **Users**: User and account management
-- **Admin**: Administrative operations
-- **Carriers**: Carrier-specific operations
-- **Webhooks**: Webhook management
-
-## Examples
-
-### Get Shipping Rates
-
-```go
-rates, err := client.Shipping.GetRates(context.Background(), &atoship.RateRequest{
-    FromAddress: &atoship.Address{
-        Street1:    "456 Oak Ave",
-        City:       "Los Angeles",
-        State:      "CA",
-        PostalCode: "90001",
-        Country:    "US",
-    },
-    ToAddress: &atoship.Address{
-        Street1:    "789 Pine St",
-        City:       "New York",
-        State:      "NY",
-        PostalCode: "10001",
-        Country:    "US",
-    },
-    Parcel: &atoship.Parcel{
-        Length:     10,
-        Width:      8,
-        Height:     6,
-        DimUnit:    "in",
-        Weight:     2.5,
-        WeightUnit: "lb",
-    },
-})
-```
-
-### Purchase a Label
-
-```go
-label, err := client.Shipping.PurchaseLabel(context.Background(), &atoship.PurchaseLabelRequest{
-    RateID:  "rate_123456",
-    OrderID: "order_789012",
-})
-```
-
-### Track a Package
-
-```go
-tracking, err := client.Tracking.Track(context.Background(), "1Z999AA10123456784")
-```
-
-## Error Handling
-
-The SDK provides typed errors for better error handling:
-
 ```go
 import "github.com/atoship/atoship-go/atoship"
+```
 
-label, err := client.Shipping.PurchaseLabel(ctx, request)
-if err != nil {
-    if apiErr, ok := err.(*atoship.APIError); ok {
-        switch apiErr.Code {
-        case atoship.ErrCodeValidation:
-            // Handle validation error
-        case atoship.ErrCodeRateLimit:
-            // Handle rate limit
-        case atoship.ErrCodeAuthentication:
-            // Handle auth error
-        default:
-            // Handle other API errors
-        }
-    }
-    // Handle non-API errors
+## Quick start
+
+```go
+client := atoship.NewClient(os.Getenv("ATOSHIP_API_KEY"))
+ctx := context.Background()
+
+from := atoship.InlineAddress(atoship.Address{
+    Name: "Warehouse", Street1: "417 Montgomery St",
+    City: "San Francisco", State: "CA", Zip: "94104",
+})
+to := atoship.InlineAddress(atoship.Address{
+    Name: "Jane Doe", Street1: "1600 Pennsylvania Ave NW",
+    City: "Washington", State: "DC", Zip: "20500",
+})
+parcel := atoship.InlineParcel(atoship.Parcel{
+    Length: 10, Width: 8, Height: 4, DimensionUnit: "in",
+    Weight: 16, WeightUnit: "oz",
+})
+
+rates, err := client.Rates.List(ctx, &atoship.RateRequest{
+    FromAddress: from, ToAddress: to, Parcel: parcel,
+})
+
+label, err := client.Labels.Create(ctx, &atoship.LabelRequest{
+    RateID: rates[0].ID, FromAddress: from, ToAddress: to, Parcel: parcel,
+})
+label, err = client.Labels.Purchase(ctx, label.ID, nil)
+
+fmt.Println(label.TrackingNumber, label.LabelURL)
+```
+
+`examples/basic_example.go` is the same flow end to end, including tracking.
+
+## Four things worth knowing before you build on this
+
+**Give the parcel its dimensions.** Carriers bill the greater of actual and
+dimensional weight. Quoting a light, bulky box on weight alone returns a price
+the carrier will not honour, and the difference arrives later as an adjustment.
+
+**The rate limit is 5 requests per minute, per organization.** Bought one at a
+time, a shipment costs three requests — quote, create, purchase — so a loop over
+a day's orders stops after the second parcel. That is what `Rates.ListBatch` and
+`Labels.BuyBatch` are for: one request, one rate-limit charge, up to 50 quotes or
+25 labels.
+
+```go
+result, err := client.Labels.BuyBatch(ctx, &atoship.BuyBatchRequest{
+    Select: "cheapest",
+    Shipments: []atoship.BatchShipment{
+        {Reference: "SO-10471", ToAddress: to, Parcel: parcel},
+        {Reference: "SO-10472", ToAddress: to2, Parcel: parcel2},
+    },
+})
+```
+
+A nil error does not mean every shipment succeeded. Read `result.Summary` and
+each row's `Status`.
+
+**If a batch call times out, do not resubmit.** Read the manifest instead — the
+stored rows are authoritative, and a blind resubmit can buy a second label:
+
+```go
+result, err := client.Labels.GetBatch(ctx, batchID)
+```
+
+**`Status: "needs_review"` on a row means the wallet was charged but the label
+was not recorded.** That shipment is held for reconciliation. Do not re-buy it.
+
+## Errors
+
+Every failure is an `*atoship.Error` carrying the API's own code. Branch on the
+code, not the message:
+
+```go
+label, err := client.Labels.Purchase(ctx, id, nil)
+
+var apiErr *atoship.Error
+if errors.As(err, &apiErr) && apiErr.Code == atoship.ErrInsufficientBalance {
+    // top up, or enable auto-recharge
 }
 ```
 
-## Configuration
+`IsNotFound`, `IsRateLimited`, `IsUnauthorized` and `IsSandbox` cover the common
+checks.
+
+## Sandbox
+
+A key beginning `ak_test_` validates requests and refuses to spend money.
+Anything that would buy returns an `*atoship.SandboxError` — the request shape
+was accepted, only the key needs swapping:
 
 ```go
-client := atoship.NewClient("your-api-key",
-    atoship.WithBaseURL("https://api.atoship.com"),
-    atoship.WithTimeout(30 * time.Second),
-    atoship.WithRetryCount(3),
-    atoship.WithDebug(true),
-)
+_, err := client.Labels.Create(ctx, req)
+if atoship.IsSandbox(err) {
+    // request is well-formed; use an ak_live_ key to actually create it
+}
 ```
 
-## Testing
+Reads and quotes work normally on a sandbox key.
 
-Run the test suite:
+## What is covered
+
+| Service | Calls |
+|---|---|
+| `Account` | Get |
+| `Rates` | List, ListBatch |
+| `Labels` | Create, Purchase, Get, List, Void, DownloadURL, BuyBatch, GetBatch |
+| `Addresses` | Create, List, Validate, Verify |
+| `Tracking` | Get |
+| `CarrierAccounts` | List, Get, Create, Update, Delete |
+| `Webhooks` | List, Get, Create, Update, Patch, Delete |
+| `Returns` | Create, List |
+| `Insurances` | Create, Get, List, FileClaim, ListClaims, CancelClaim |
+| `Pickups` | Create, Get, List, Cancel |
+| `Orders` | GetByPlatform |
+
+Client options: `WithBaseURL`, `WithTimeout`, `WithHTTPClient`, `WithUserAgent`.
+
+## Verifying against the live API
+
+`verify/` calls every method above against the real API and prints a pass/fail
+line per endpoint. Nothing in it is stubbed, which is the point:
 
 ```bash
-go test ./...
+ATOSHIP_API_KEY=ak_test_… go run ./verify
 ```
 
-Run tests with coverage:
+Use a sandbox key. Reads and quotes run for real; writes come back as
+`SandboxError` without buying anything.
 
-```bash
-go test -v -cover ./...
-```
+## Documentation
 
-## Contributing
-
-We welcome contributions! Please see our contributing guidelines for details.
+- API reference: https://atoship.com/docs/api-reference
+- Issues: https://github.com/atoship/atoship-go/issues
 
 ## License
 
-MIT License - see LICENSE file for details.
-
-## Support
-
-- Documentation: https://atoship.com/docs
-- API Reference: https://atoship.com/docs/api-reference
-- Support: support@atoship.com
+MIT
